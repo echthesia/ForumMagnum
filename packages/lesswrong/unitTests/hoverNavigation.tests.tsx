@@ -137,6 +137,52 @@ describe('hover navigation', () => {
     expect(screen.getByRole('tooltip').getAttribute('data-clickable')).toBe('true');
   });
 
+  it('unhovers every hovered target when the page is restored from the browser back/forward cache', () => {
+    const onLeaveA = jest.fn();
+    const onLeaveB = jest.fn();
+    render(<Page>
+      <HoverTarget onLeave={onLeaveA}/>
+      <HoverTarget onLeave={onLeaveB}/>
+    </Page>);
+    const [targetA, targetB] = screen.getAllByRole('button');
+    // Simulates iOS Safari after a restore: both links received an emulated
+    // mouseover, and neither received a mouseleave.
+    fireEvent.mouseOver(targetA);
+    fireEvent.mouseOver(targetB);
+
+    // A pageshow for an ordinary (non-cached) load leaves hover state alone.
+    act(() => {
+      window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: false }));
+    });
+    expect(targetA.getAttribute('data-hovered')).toBe('true');
+    expect(targetB.getAttribute('data-hovered')).toBe('true');
+
+    act(() => {
+      window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }));
+    });
+    expect(targetA.getAttribute('data-hovered')).toBe('false');
+    expect(targetA.getAttribute('data-anchored')).toBe('false');
+    expect(targetB.getAttribute('data-hovered')).toBe('false');
+    expect(targetB.getAttribute('data-anchored')).toBe('false');
+    expect(onLeaveA).toHaveBeenCalledTimes(1);
+    expect(onLeaveB).toHaveBeenCalledTimes(1);
+
+    fireEvent.mouseOver(targetA);
+    expect(targetA.getAttribute('data-hovered')).toBe('true');
+  });
+
+  it('closes an open tooltip when the page is restored from the browser back/forward cache', async () => {
+    render(<Page><LWTooltip title="User preview"><button>User</button></LWTooltip></Page>);
+    fireEvent.mouseOver(screen.getByRole('button'));
+    await act(() => jest.advanceTimersByTime(200));
+    expect(screen.getByRole('tooltip')).toBeTruthy();
+
+    act(() => {
+      window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }));
+    });
+    expect(screen.queryByRole('tooltip')).toBeNull();
+  });
+
   it('resets pinned-open state on navigation and Activity restoration', () => {
     const { rerender } = render(<Page><PinnedTooltip/></Page>);
     fireEvent.click(screen.getByRole('button'));
